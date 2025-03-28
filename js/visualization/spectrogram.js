@@ -60,24 +60,48 @@ export class Spectrogram {
      * @returns {string} RGB color string
      */
     getColor(value) {
-        const colormap = this.colorMaps[this.options.colormap];
-        const position = value * (colormap.length - 1);
-        const index = Math.floor(position);
-        const fraction = position - index;
+        try {
+            // Validate inputs
+            if (typeof value !== 'number' || isNaN(value)) {
+                console.error('Invalid value passed to getColor:', value);
+                return 'rgb(0, 0, 0)'; // Return black for invalid values
+            }
 
-        if (index >= colormap.length - 1) {
-            const color = colormap[colormap.length - 1];
-            return `rgb(${color[0]}, ${color[1]}, ${color[2]})`;
+            // Ensure value is in [0,1] range
+            value = Math.max(0, Math.min(1, value));
+
+            const colormap = this.colorMaps[this.options.colormap];
+            if (!colormap || !Array.isArray(colormap)) {
+                console.error('Invalid colormap:', this.options.colormap);
+                return 'rgb(0, 0, 0)';
+            }
+
+            const position = value * (colormap.length - 1);
+            const index = Math.floor(position);
+            const fraction = position - index;
+
+            if (index >= colormap.length - 1) {
+                const color = colormap[colormap.length - 1];
+                return `rgb(${color[0]}, ${color[1]}, ${color[2]})`;
+            }
+
+            const color1 = colormap[index];
+            const color2 = colormap[index + 1];
+
+            if (!color1 || !color2 || !Array.isArray(color1) || !Array.isArray(color2)) {
+                console.error('Invalid color values in colormap');
+                return 'rgb(0, 0, 0)';
+            }
+
+            const r = Math.round(color1[0] + fraction * (color2[0] - color1[0]));
+            const g = Math.round(color1[1] + fraction * (color2[1] - color1[1]));
+            const b = Math.round(color1[2] + fraction * (color2[2] - color1[2]));
+
+            return `rgb(${r}, ${g}, ${b})`;
+        } catch (err) {
+            console.error('Error in getColor:', err);
+            return 'rgb(0, 0, 0)';
         }
-
-        const color1 = colormap[index];
-        const color2 = colormap[index + 1];
-
-        const r = Math.round(color1[0] + fraction * (color2[0] - color1[0]));
-        const g = Math.round(color1[1] + fraction * (color2[1] - color1[1]));
-        const b = Math.round(color1[2] + fraction * (color2[2] - color1[2]));
-
-        return `rgb(${r}, ${g}, ${b})`;
     }
 
     /**
@@ -85,24 +109,21 @@ export class Spectrogram {
      * @param {Float32Array} frequencyData - Frequency domain data
      * @param {number} sampleRate - Sample rate in Hz
      */
-    update(frequencyData, sampleRate) {
-        // Normalize frequency data to 0-1 range
-        const normalizedData = new Float32Array(frequencyData.length);
-        for (let i = 0; i < frequencyData.length; i++) {
-            const db = 20 * Math.log10(Math.abs(frequencyData[i]));
-            normalizedData[i] = (db - this.options.minDecibels) / 
-                               (this.options.maxDecibels - this.options.minDecibels);
-            normalizedData[i] = Math.max(0, Math.min(1, normalizedData[i]));
+    update(spectrogramMatrix, sampleRate) {
+        if (!spectrogramMatrix || !spectrogramMatrix.length) {
+            console.log('No spectrogram data provided');
+            return;
         }
 
-        // Add new data column
-        this.spectrogramData.unshift(normalizedData);
-
-        // Remove old data to maintain time range
-        const maxColumns = Math.floor(this.options.timeRange * sampleRate / frequencyData.length);
-        if (this.spectrogramData.length > maxColumns) {
-            this.spectrogramData.pop();
-        }
+        // Initialize spectrogramData with normalized values
+        this.spectrogramData = spectrogramMatrix.map(column => {
+            return column.map(value => {
+                // Value is already in dB from spectralAnalyzer
+                const normalized = (value - this.options.minDecibels) /
+                                 (this.options.maxDecibels - this.options.minDecibels);
+                return Math.max(0, Math.min(1, normalized));
+            });
+        });
 
         this.draw();
     }
@@ -114,25 +135,56 @@ export class Spectrogram {
         const { width, height } = this.options;
         this.ctx.clearRect(0, 0, width, height);
 
-        const columnWidth = width / this.spectrogramData.length;
-        const rowHeight = height / this.spectrogramData[0].length;
-
-        // Draw frequency bins
-        for (let i = 0; i < this.spectrogramData.length; i++) {
-            const column = this.spectrogramData[i];
-            for (let j = 0; j < column.length; j++) {
-                const value = column[j];
-                this.ctx.fillStyle = this.getColor(value);
-                this.ctx.fillRect(
-                    i * columnWidth,
-                    height - (j + 1) * rowHeight,
-                    columnWidth + 1,
-                    rowHeight + 1
-                );
-            }
+        // Validate data exists and has proper structure
+        if (!this.spectrogramData || this.spectrogramData.length === 0) {
+            console.log('No spectrogram data available to draw');
+            return;
         }
 
-        // Draw axes and labels
+        // Validate data dimensions
+        const numTimeSteps = this.spectrogramData.length;
+        const numFreqBins = this.spectrogramData[0]?.length;
+        if (!numFreqBins) {
+            console.error('Invalid spectrogram data structure');
+            return;
+        }
+
+        const columnWidth = width / numTimeSteps;
+        const rowHeight = height / numFreqBins;
+
+        try {
+            // Draw frequency bins with error handling
+            for (let i = 0; i < this.spectrogramData.length; i++) {
+                const column = this.spectrogramData[i];
+                if (!Array.isArray(column) && !(column instanceof Float32Array)) {
+                    console.error(`Invalid column data at index ${i}`);
+                    continue;
+                }
+
+                for (let j = 0; j < column.length; j++) {
+                    const value = column[j];
+                    if (typeof value !== 'number' || isNaN(value)) {
+                        continue;  // Skip invalid values
+                    }
+
+                    try {
+                        this.ctx.fillStyle = this.getColor(value);
+                        this.ctx.fillRect(
+                            i * columnWidth,
+                            height - (j + 1) * rowHeight,
+                            columnWidth + 1,
+                            rowHeight + 1
+                        );
+                    } catch (err) {
+                        console.error(`Error drawing spectrogram bin at (${i},${j}):`, err);
+                    }
+                }
+            }
+
+            // Draw axes and labels
+        } catch (err) {
+            console.error('Error drawing spectrogram:', err);
+        }
         this.drawAxes();
     }
 
