@@ -31,14 +31,25 @@ class PlotManager {
                 responsive: true,
                 maintainAspectRatio: false,
                 animation: false,
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: (context) => {
+                                return `Time: ${context.parsed.x.toFixed(3)}s, Amplitude: ${context.parsed.y.toFixed(3)}`;
+                            }
+                        }
+                    }
+                },
                 scales: {
                     x: {
+                        type: 'linear',
                         title: {
                             display: true,
                             text: 'Time (s)'
                         }
                     },
                     y: {
+                        type: 'linear',
                         title: {
                             display: true,
                             text: 'Amplitude'
@@ -66,6 +77,21 @@ class PlotManager {
                 responsive: true,
                 maintainAspectRatio: false,
                 animation: false,
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: (context) => {
+                                const dataIndex = context.dataIndex;
+                                const phase = this.freqChart.data.datasets[0].phases?.[dataIndex];
+                                return [
+                                    `Frequency: ${context.parsed.x.toFixed(2)} Hz`,
+                                    `Magnitude: ${context.parsed.y.toFixed(3)}`,
+                                    phase !== undefined ? `Phase: ${phase.toFixed(2)}°` : ''
+                                ].filter(Boolean);
+                            }
+                        }
+                    }
+                },
                 scales: {
                     x: {
                         type: 'linear',
@@ -93,7 +119,10 @@ class PlotManager {
      */
     updateTimePlot(timePoints, signal) {
         this.timeChart.data.labels = timePoints;
-        this.timeChart.data.datasets[0].data = signal;
+        this.timeChart.data.datasets[0].data = signal.map((y, i) => ({
+            x: timePoints[i],
+            y: y
+        }));
         this.timeChart.update();
     }
 
@@ -101,20 +130,64 @@ class PlotManager {
      * Update frequency domain plot
      * @param {Array} frequencies - Array of frequency points
      * @param {Array} magnitudes - Array of magnitude values
-     * @param {boolean} logScale - Whether to use logarithmic scale
+     * @param {Object} options - Plot options
+     * @param {Array} options.phases - Array of phase values
+     * @param {boolean} options.logScale - Whether to use logarithmic scale
+     * @param {Array} options.peaks - Array of peak objects
      */
-    updateFreqPlot(frequencies, magnitudes, logScale = false) {
-        this.freqChart.data.labels = frequencies;
-        this.freqChart.data.datasets[0].data = magnitudes;
+    updateFreqPlot(frequencies, magnitudes, options = {}) {
+        const { phases, logScale = false, peaks = [] } = options;
 
-        // Update y-axis scale if needed
-        if (logScale) {
-            this.freqChart.options.scales.y.type = 'logarithmic';
+        // Update main frequency data
+        this.freqChart.data.labels = frequencies;
+        this.freqChart.data.datasets[0].data = magnitudes.map((y, i) => ({
+            x: frequencies[i],
+            y: logScale ? (y > 0 ? 20 * Math.log10(y) : -100) : y
+        }));
+
+        // Store phases for tooltip
+        this.freqChart.data.datasets[0].phases = phases;
+
+        // Update y-axis scale and label
+        this.freqChart.options.scales.y.type = logScale ? 'logarithmic' : 'linear';
+        this.freqChart.options.scales.y.title.text = logScale ? 'Magnitude (dB)' : 'Magnitude';
+
+        // Add peak markers if available
+        if (peaks.length > 0) {
+            this.freqChart.data.datasets[1] = {
+                label: 'Peaks',
+                data: peaks.map(peak => ({
+                    x: peak.frequency,
+                    y: logScale ? (peak.magnitude > 0 ? 20 * Math.log10(peak.magnitude) : -100) : peak.magnitude
+                })),
+                backgroundColor: 'red',
+                borderColor: 'red',
+                pointRadius: 5,
+                pointStyle: 'triangle',
+                showLine: false
+            };
         } else {
-            this.freqChart.options.scales.y.type = 'linear';
+            this.freqChart.data.datasets = this.freqChart.data.datasets.slice(0, 1);
         }
 
         this.freqChart.update();
+    }
+
+    /**
+     * Update peak table
+     * @param {Array} peaks - Array of peak objects
+     */
+    updatePeakTable(peaks) {
+        const tableBody = document.getElementById('peakTableBody');
+        if (!tableBody) return;
+
+        tableBody.innerHTML = peaks.map(peak => `
+            <tr>
+                <td>${peak.frequency.toFixed(2)}</td>
+                <td>${peak.magnitude.toFixed(3)}</td>
+                <td>${peak.phase.toFixed(2)}</td>
+            </tr>
+        `).join('');
     }
 
     /**
@@ -128,6 +201,11 @@ class PlotManager {
         
         this.timeChart.update();
         this.freqChart.update();
+
+        const tableBody = document.getElementById('peakTableBody');
+        if (tableBody) {
+            tableBody.innerHTML = '';
+        }
     }
 
     /**

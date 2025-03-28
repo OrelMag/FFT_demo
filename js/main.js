@@ -10,13 +10,79 @@ document.addEventListener('DOMContentLoaded', () => {
     const signalForm = document.getElementById('signalForm');
     const fileForm = document.getElementById('fileForm');
     const waveTypeSelect = document.getElementById('waveType');
+    const singleFreqControls = document.getElementById('singleFreqControls');
+    const multiFreqControls = document.getElementById('multiFreqControls');
     const frequencyInput = document.getElementById('frequency');
     const amplitudeInput = document.getElementById('amplitude');
+    const phaseInput = document.getElementById('phase');
     const durationInput = document.getElementById('duration');
     const sampleRateInput = document.getElementById('sampleRate');
     const windowTypeSelect = document.getElementById('windowType');
     const dataFileInput = document.getElementById('dataFile');
     const sampleRateFileInput = document.getElementById('sampleRateFile');
+    const peakThresholdInput = document.getElementById('peakThreshold');
+    const logScaleCheckbox = document.getElementById('logScale');
+    const exportFFTButton = document.getElementById('exportFFT');
+    const exportPeaksButton = document.getElementById('exportPeaks');
+    const addFrequencyButton = document.getElementById('addFrequency');
+
+    let currentFrequencies = [];
+    let lastFFTResult = null;
+
+    /**
+     * Create a frequency component input group
+     * @param {number} index - Component index
+     * @returns {HTMLElement} Component input group
+     */
+    function createFrequencyComponent(index) {
+        const div = document.createElement('div');
+        div.className = 'frequency-component mb-3 border p-2';
+        div.innerHTML = `
+            <div class="mb-2">
+                <label class="form-label">Component ${index + 1}</label>
+                <button type="button" class="btn btn-sm btn-danger float-end remove-freq">Remove</button>
+            </div>
+            <div class="mb-2">
+                <label class="form-label">Frequency (Hz)</label>
+                <input type="number" class="form-control freq-input" value="10" step="any">
+            </div>
+            <div class="mb-2">
+                <label class="form-label">Amplitude</label>
+                <input type="number" class="form-control amp-input" value="1" step="any">
+            </div>
+            <div class="mb-2">
+                <label class="form-label">Phase (degrees)</label>
+                <input type="number" class="form-control phase-input" value="0" step="any">
+            </div>
+        `;
+
+        const removeButton = div.querySelector('.remove-freq');
+        removeButton.addEventListener('click', () => {
+            div.remove();
+            currentFrequencies = collectFrequencyComponents();
+        });
+
+        return div;
+    }
+
+    /**
+     * Collect frequency component values
+     * @returns {Array} Array of frequency component objects
+     */
+    function collectFrequencyComponents() {
+        const components = [];
+        const componentDivs = document.querySelectorAll('.frequency-component');
+        
+        componentDivs.forEach(div => {
+            components.push({
+                frequency: parseFloat(div.querySelector('.freq-input').value),
+                amplitude: parseFloat(div.querySelector('.amp-input').value),
+                phase: parseFloat(div.querySelector('.phase-input').value)
+            });
+        });
+        
+        return components;
+    }
 
     /**
      * Process and display signal
@@ -27,15 +93,28 @@ document.addEventListener('DOMContentLoaded', () => {
      */
     function processAndDisplaySignal(signal, timePoints, sampleRate, title) {
         try {
+            // Get peak threshold
+            const peakThreshold = parseFloat(peakThresholdInput.value);
+            
             // Compute FFT
-            const { frequencies, magnitudes } = FFTProcessor.computeFFT(signal, {
+            lastFFTResult = FFTProcessor.computeFFT(signal, {
                 windowType: windowTypeSelect.value,
-                sampleRate: sampleRate
+                sampleRate: sampleRate,
+                peakThreshold: peakThreshold
             });
+
+            const { frequencies, magnitudes, phases, peaks } = lastFFTResult;
 
             // Update plots
             plotManager.updateTimePlot(timePoints, signal);
-            plotManager.updateFreqPlot(frequencies, magnitudes);
+            plotManager.updateFreqPlot(frequencies, magnitudes, {
+                phases,
+                logScale: logScaleCheckbox.checked,
+                peaks
+            });
+
+            // Update peak table
+            plotManager.updatePeakTable(peaks);
 
             // Update plot titles
             plotManager.updatePlotOptions({
@@ -56,14 +135,22 @@ document.addEventListener('DOMContentLoaded', () => {
     function handleSignalFormSubmit(e) {
         e.preventDefault();
 
-        // Get form values
         const params = {
-            waveType: waveTypeSelect.value,
-            frequency: parseFloat(frequencyInput.value),
-            amplitude: parseFloat(amplitudeInput.value),
             duration: parseFloat(durationInput.value),
             sampleRate: parseFloat(sampleRateInput.value)
         };
+
+        if (waveTypeSelect.value === 'multiSine') {
+            params.components = collectFrequencyComponents();
+            if (params.components.length === 0) {
+                alert('Please add at least one frequency component');
+                return;
+            }
+        } else {
+            params.frequency = parseFloat(frequencyInput.value);
+            params.amplitude = parseFloat(amplitudeInput.value);
+            params.phase = parseFloat(phaseInput.value);
+        }
 
         // Validate input
         if (!validateSignalParams(params)) {
@@ -72,7 +159,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Generate signal
         const { timePoints, signal } = SignalGenerator.generateSignal(
-            params.waveType,
+            waveTypeSelect.value,
             params
         );
 
@@ -81,7 +168,9 @@ document.addEventListener('DOMContentLoaded', () => {
             signal,
             timePoints,
             params.sampleRate,
-            `${params.waveType.charAt(0).toUpperCase() + params.waveType.slice(1)} Wave - ${params.frequency}Hz`
+            waveTypeSelect.value === 'multiSine' ? 
+                'Multi-Frequency Signal' : 
+                `${waveTypeSelect.value.charAt(0).toUpperCase() + waveTypeSelect.value.slice(1)} Wave`
         );
     }
 
@@ -129,11 +218,11 @@ document.addEventListener('DOMContentLoaded', () => {
      * @returns {boolean} True if valid, false otherwise
      */
     function validateSignalParams(params) {
-        if (isNaN(params.frequency)) {
+        if (!params.components && (isNaN(params.frequency) || params.frequency <= 0)) {
             alert('Please enter a valid frequency');
             return false;
         }
-        if (isNaN(params.amplitude)) {
+        if (!params.components && (isNaN(params.amplitude))) {
             alert('Please enter a valid amplitude');
             return false;
         }
@@ -145,17 +234,6 @@ document.addEventListener('DOMContentLoaded', () => {
             return false;
         }
 
-        // Warn about Nyquist frequency but allow to proceed
-        if (params.frequency > params.sampleRate / 2) {
-            const proceed = confirm(
-                `Warning: Frequency (${params.frequency}Hz) exceeds Nyquist frequency ` +
-                `(${params.sampleRate / 2}Hz). This may cause aliasing.\n\n` +
-                `Do you want to proceed anyway?`
-            );
-            if (!proceed) {
-                return false;
-            }
-        }
         return true;
     }
 
@@ -172,18 +250,66 @@ document.addEventListener('DOMContentLoaded', () => {
         return true;
     }
 
+    // Add event listeners
+    waveTypeSelect.addEventListener('change', () => {
+        const isMultiSine = waveTypeSelect.value === 'multiSine';
+        singleFreqControls.style.display = isMultiSine ? 'none' : 'block';
+        multiFreqControls.style.display = isMultiSine ? 'block' : 'none';
+    });
+
+    addFrequencyButton.addEventListener('click', () => {
+        const frequenciesDiv = document.getElementById('frequencies');
+        const component = createFrequencyComponent(frequenciesDiv.children.length);
+        frequenciesDiv.appendChild(component);
+        currentFrequencies = collectFrequencyComponents();
+    });
+
+    // Add first frequency component for multi-sine
+    addFrequencyButton.click();
+
+    // FFT controls event listeners
+    windowTypeSelect.addEventListener('change', () => {
+        if (lastFFTResult) {
+            const { signal, timePoints, sampleRate, title } = lastFFTResult;
+            processAndDisplaySignal(signal, timePoints, sampleRate, title);
+        }
+    });
+
+    logScaleCheckbox.addEventListener('change', () => {
+        if (lastFFTResult) {
+            const { frequencies, magnitudes, phases, peaks } = lastFFTResult;
+            plotManager.updateFreqPlot(frequencies, magnitudes, {
+                phases,
+                logScale: logScaleCheckbox.checked,
+                peaks
+            });
+        }
+    });
+
+    peakThresholdInput.addEventListener('change', () => {
+        if (lastFFTResult) {
+            const { signal, timePoints, sampleRate, title } = lastFFTResult;
+            processAndDisplaySignal(signal, timePoints, sampleRate, title);
+        }
+    });
+
+    // Export buttons event listeners
+    exportFFTButton.addEventListener('click', () => {
+        if (lastFFTResult) {
+            const { frequencies, magnitudes, phases } = lastFFTResult;
+            ExportUtils.exportSignalData({ frequencies, magnitudes, phases }, 'fft');
+        }
+    });
+
+    exportPeaksButton.addEventListener('click', () => {
+        if (lastFFTResult) {
+            ExportUtils.exportSignalData({ peaks: lastFFTResult.peaks }, 'peaks');
+        }
+    });
+
     // Add form submit event listeners
     signalForm.addEventListener('submit', handleSignalFormSubmit);
     fileForm.addEventListener('submit', handleFileFormSubmit);
-
-    // Add window type change event listener
-    windowTypeSelect.addEventListener('change', () => {
-        if (dataFileInput.files.length > 0) {
-            fileForm.dispatchEvent(new Event('submit'));
-        } else {
-            signalForm.dispatchEvent(new Event('submit'));
-        }
-    });
 
     // Generate initial signal
     signalForm.dispatchEvent(new Event('submit'));

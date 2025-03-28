@@ -22,20 +22,52 @@ class SignalGenerator {
     }
 
     /**
+     * Generate multi-frequency sine wave
+     * @param {Object} params - Wave parameters
+     * @param {Array} params.components - Array of frequency components
+     * @param {number} params.duration - Duration in seconds
+     * @param {number} params.sampleRate - Sample rate in Hz
+     * @returns {Object} Object containing time and signal arrays
+     */
+    static generateMultiSineWave(params) {
+        const { components, duration, sampleRate } = params;
+        const timePoints = this.generateTimePoints(duration, sampleRate);
+        const signal = new Array(timePoints.length).fill(0);
+
+        // Sum all frequency components
+        components.forEach(comp => {
+            const { frequency, amplitude, phase } = comp;
+            const phaseRad = (phase || 0) * Math.PI / 180; // Convert phase from degrees to radians
+            
+            for (let i = 0; i < timePoints.length; i++) {
+                signal[i] += amplitude * Math.sin(2 * Math.PI * frequency * timePoints[i] + phaseRad);
+            }
+        });
+
+        return { timePoints, signal };
+    }
+
+    /**
      * Generate sine wave
      * @param {Object} params - Wave parameters
      * @param {number} params.frequency - Frequency in Hz
      * @param {number} params.amplitude - Amplitude
+     * @param {number} params.phase - Phase in degrees
      * @param {number} params.duration - Duration in seconds
      * @param {number} params.sampleRate - Sample rate in Hz
      * @returns {Object} Object containing time and signal arrays
      */
     static generateSineWave(params) {
-        const { frequency, amplitude, duration, sampleRate } = params;
-        const timePoints = this.generateTimePoints(duration, sampleRate);
-        const signal = timePoints.map(t => amplitude * Math.sin(2 * Math.PI * frequency * t));
-        
-        return { timePoints, signal };
+        const { frequency, amplitude, phase = 0, duration, sampleRate } = params;
+        return this.generateMultiSineWave({
+            components: [{
+                frequency,
+                amplitude,
+                phase
+            }],
+            duration,
+            sampleRate
+        });
     }
 
     /**
@@ -101,7 +133,7 @@ class SignalGenerator {
 
     /**
      * Generate signal based on wave type
-     * @param {string} type - Wave type (sine, square, triangle, sawtooth)
+     * @param {string} type - Wave type (sine, multiSine, square, triangle, sawtooth)
      * @param {Object} params - Wave parameters
      * @returns {Object} Object containing time and signal arrays
      */
@@ -109,6 +141,8 @@ class SignalGenerator {
         switch (type.toLowerCase()) {
             case 'sine':
                 return this.generateSineWave(params);
+            case 'multisine':
+                return this.generateMultiSineWave(params);
             case 'square':
                 return this.generateSquareWave(params);
             case 'triangle':

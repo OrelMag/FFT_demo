@@ -50,19 +50,39 @@
                                 <label for="waveType" class="form-label">Wave Type</label>
                                 <select class="form-select" id="waveType">
                                     <option value="sine">Sine Wave</option>
+                                    <option value="multiSine">Multi-Frequency Sine</option>
                                     <option value="square">Square Wave</option>
                                     <option value="triangle">Triangle Wave</option>
                                     <option value="sawtooth">Sawtooth Wave</option>
                                 </select>
                             </div>
-                            <div class="mb-3">
-                                <label for="frequency" class="form-label">Frequency (Hz)</label>
-                                <input type="number" class="form-control" id="frequency" value="10" step="any">
+
+                            <!-- Single Frequency Controls -->
+                            <div id="singleFreqControls">
+                                <div class="mb-3">
+                                    <label for="frequency" class="form-label">Frequency (Hz)</label>
+                                    <input type="number" class="form-control" id="frequency" value="10" step="any">
+                                </div>
+                                <div class="mb-3">
+                                    <label for="amplitude" class="form-label">Amplitude</label>
+                                    <input type="number" class="form-control" id="amplitude" value="1" step="any">
+                                </div>
+                                <div class="mb-3">
+                                    <label for="phase" class="form-label">Phase (degrees)</label>
+                                    <input type="number" class="form-control" id="phase" value="0" step="any">
+                                </div>
                             </div>
-                            <div class="mb-3">
-                                <label for="amplitude" class="form-label">Amplitude</label>
-                                <input type="number" class="form-control" id="amplitude" value="1" step="any">
+
+                            <!-- Multi-Frequency Controls -->
+                            <div id="multiFreqControls" style="display: none;">
+                                <div id="frequencies">
+                                    <!-- Frequency components will be added here -->
+                                </div>
+                                <button type="button" class="btn btn-secondary mb-3" id="addFrequency">
+                                    Add Frequency Component
+                                </button>
                             </div>
+
                             <div class="mb-3">
                                 <label for="duration" class="form-label">Duration (s)</label>
                                 <input type="number" class="form-control" id="duration" value="1" step="any" min="0.01">
@@ -77,7 +97,7 @@
                 </div>
 
                 <!-- Window Function Panel -->
-                <div class="card">
+                <div class="card mb-3">
                     <div class="card-header">
                         <h5 class="card-title mb-0">Window Function</h5>
                     </div>
@@ -90,6 +110,33 @@
                             <option value="blackman">Blackman</option>
                             <option value="kaiser">Kaiser</option>
                         </select>
+                    </div>
+                </div>
+
+                <!-- Analysis Options -->
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">Analysis Options</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label for="peakThreshold" class="form-label">Peak Detection Threshold (%)</label>
+                            <input type="number" class="form-control" id="peakThreshold" value="10" min="1" max="100">
+                        </div>
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="logScale">
+                                <label class="form-check-label" for="logScale">
+                                    Logarithmic Scale
+                                </label>
+                            </div>
+                        </div>
+                        <button type="button" class="btn btn-secondary mb-2" id="exportFFT">
+                            Export FFT Data
+                        </button>
+                        <button type="button" class="btn btn-secondary" id="exportPeaks">
+                            Export Peak Data
+                        </button>
                     </div>
                 </div>
             </div>
@@ -109,13 +156,36 @@
                         </div>
                     </div>
                     <!-- Frequency Domain Plot -->
-                    <div class="col-md-12">
+                    <div class="col-md-12 mb-4">
                         <div class="card">
                             <div class="card-header">
                                 <h5 class="card-title mb-0">Frequency Domain</h5>
                             </div>
                             <div class="card-body">
                                 <canvas id="freqCanvas"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Dominant Frequencies -->
+                    <div class="col-md-12">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="card-title mb-0">Dominant Frequencies</h5>
+                            </div>
+                            <div class="card-body">
+                                <div id="peakList" class="table-responsive">
+                                    <table class="table table-sm">
+                                        <thead>
+                                            <tr>
+                                                <th>Frequency (Hz)</th>
+                                                <th>Magnitude</th>
+                                                <th>Phase (degrees)</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="peakTableBody">
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -128,6 +198,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/numeric/1.2.6/numeric.min.js"></script>
     <script src="js/utils/dataLoader.js"></script>
+    <script src="js/utils/export.js"></script>
     <script src="js/signalGenerator/basicWaves.js"></script>
     <script src="js/processing/fft.js"></script>
     <script src="js/visualization/plotManager.js"></script>
