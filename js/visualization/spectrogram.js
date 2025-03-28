@@ -110,22 +110,47 @@ export class Spectrogram {
      * @param {number} sampleRate - Sample rate in Hz
      */
     update(spectrogramMatrix, sampleRate) {
-        if (!spectrogramMatrix || !spectrogramMatrix.length) {
-            console.log('No spectrogram data provided');
-            return;
-        }
+        try {
+            if (!spectrogramMatrix || !Array.isArray(spectrogramMatrix)) {
+                console.error('Invalid spectrogram matrix provided:', spectrogramMatrix);
+                return;
+            }
 
-        // Initialize spectrogramData with normalized values
-        this.spectrogramData = spectrogramMatrix.map(column => {
-            return column.map(value => {
-                // Value is already in dB from spectralAnalyzer
-                const normalized = (value - this.options.minDecibels) /
-                                 (this.options.maxDecibels - this.options.minDecibels);
-                return Math.max(0, Math.min(1, normalized));
+            if (spectrogramMatrix.length === 0) {
+                console.error('Empty spectrogram matrix provided');
+                return;
+            }
+
+            if (!Array.isArray(spectrogramMatrix[0])) {
+                console.error('Invalid spectrogram data structure - expected array of arrays');
+                return;
+            }
+
+            console.log(`Updating spectrogram with ${spectrogramMatrix.length} time steps`);
+
+            // Initialize spectrogramData with normalized values
+            this.spectrogramData = spectrogramMatrix.map((column, i) => {
+                if (!Array.isArray(column)) {
+                    console.error(`Invalid column at index ${i}`);
+                    return new Array(column.length).fill(0);
+                }
+                return column.map(value => {
+                    if (typeof value !== 'number' || isNaN(value)) {
+                        console.error(`Invalid value in spectrogram data: ${value}`);
+                        return 0;
+                    }
+                    // Value is already in dB from spectralAnalyzer
+                    const normalized = (value - this.options.minDecibels) /
+                                     (this.options.maxDecibels - this.options.minDecibels);
+                    return Math.max(0, Math.min(1, normalized));
+                });
             });
-        });
 
-        this.draw();
+            console.log(`Normalized ${this.spectrogramData.length} columns of data`);
+            this.draw();
+        } catch (err) {
+            console.error('Error updating spectrogram:', err);
+        }
     }
 
     /**

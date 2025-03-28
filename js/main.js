@@ -160,10 +160,18 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             // Update spectrogram
             try {
+                // Update spectrogram options
                 spectrogram.updateOptions({ colormap: spectrogramColormap.value });
+                
+                // Compute and validate spectrogram data
                 const spectrogramData = spectralAnalyzer.computeSpectrogram(currentSignal, currentSampleRate);
-                if (spectrogramData && spectrogramData.data) {
+                console.log('Spectrogram computation result:', spectrogramData ?
+                    `Success - ${spectrogramData.data.length} time steps` : 'Failed');
+                
+                if (spectrogramData && Array.isArray(spectrogramData.data) && spectrogramData.data.length > 0) {
                     spectrogram.update(spectrogramData.data, currentSampleRate);
+                } else {
+                    console.error('Invalid spectrogram data structure:', spectrogramData);
                 }
             } catch (err) {
                 console.error('Error updating spectrogram:', err);

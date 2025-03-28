@@ -5,8 +5,8 @@ import { FFTProcessor } from './fft.js';
 
 export class SpectralAnalyzer {
     constructor() {
-        this.fftSize = 2048;
-        this.overlap = 0.5;
+        this.fftSize = 1024; // Reduced FFT size for better handling of shorter signals
+        this.overlap = 0.75; // Increased overlap for smoother visualization
     }
 
     /**
@@ -50,40 +50,57 @@ export class SpectralAnalyzer {
             // Convert signal to Float32Array if it isn't already
             const signalArray = signal instanceof Float32Array ? signal : new Float32Array(signal);
             
-            // Ensure minimum signal length
+            // Zero-pad signal if shorter than FFT size
+            let paddedSignal;
             if (signalArray.length < this.fftSize) {
-                console.error('Signal too short for spectrogram analysis');
-                return null;
+                paddedSignal = new Float32Array(this.fftSize);
+                paddedSignal.set(signalArray);
+            } else {
+                paddedSignal = signalArray;
             }
 
-            const segments = this._segmentSignal(signalArray);
+            // Use padded signal for segmentation
+            const segments = this._segmentSignal(paddedSignal);
             if (!segments || segments.length === 0) {
                 console.error('Failed to segment signal');
                 return null;
             }
 
-            // Process segments with error handling
-            const spectrogramData = segments.map((segment, i) => {
+            // Process segments with error handling and progress tracking
+            console.log(`Starting spectrogram computation with ${segments.length} segments`);
+            
+            let spectrogramData = [];
+            for (let i = 0; i < segments.length; i++) {
                 try {
-                    const windowed = this._applyWindow(segment, 'hanning');
-                    const fft = this._computeFFT(windowed);
-                    if (!fft) return null;
-                    
-                    return Array.from(fft.slice(0, this.fftSize / 2))
-                        .map(val => {
-                            const magnitude = Math.abs(val);
-                            return magnitude === 0 ? -100 : 20 * Math.log10(magnitude);
-                        });
+                    const windowed = this._applyWindow(segments[i], 'hanning');
+                    const result = FFTProcessor.computeFFT(windowed, {
+                        windowType: 'none',
+                        sampleRate: this.fftSize,
+                        peakThreshold: 0
+                    });
+
+                    if (!result || !result.magnitudes) {
+                        console.error(`FFT computation failed for segment ${i}`);
+                        continue;
+                    }
+
+                    const segment = result.magnitudes
+                        .slice(0, this.fftSize / 2)
+                        .map(magnitude => magnitude <= 1e-10 ? -100 : 20 * Math.log10(magnitude));
+
+                    spectrogramData.push(segment);
                 } catch (err) {
                     console.error(`Error processing segment ${i}:`, err);
-                    return null;
+                    continue;
                 }
-            }).filter(Boolean); // Remove any null segments
+            }
 
             if (spectrogramData.length === 0) {
                 console.error('No valid segments processed');
                 return null;
             }
+
+            console.log(`Successfully processed ${spectrogramData.length} segments`);
 
             const timeSteps = spectrogramData.length;
             const frequencies = new Float32Array(this.fftSize / 2);
@@ -177,8 +194,23 @@ export class SpectralAnalyzer {
         const hopSize = Math.floor(segmentSize * (1 - this.overlap));
         const segments = [];
         
-        for (let i = 0; i < signal.length - segmentSize; i += hopSize) {
+        // Handle signals shorter than or equal to FFT size
+        if (signal.length <= segmentSize) {
+            segments.push(signal);
+            return segments;
+        }
+        
+        // For longer signals, create overlapping segments
+        for (let i = 0; i <= signal.length - segmentSize; i += hopSize) {
             segments.push(signal.slice(i, i + segmentSize));
+        }
+        
+        // If there's a remaining portion that's significant (> 25% of FFT size)
+        const remaining = signal.length - (segments.length * hopSize);
+        if (remaining > segmentSize * 0.25) {
+            const lastSegment = new Float32Array(segmentSize);
+            lastSegment.set(signal.slice(signal.length - segmentSize));
+            segments.push(lastSegment);
         }
         
         return segments;
@@ -225,7 +257,17 @@ export class SpectralAnalyzer {
                 return null;
             }
 
-            return result.magnitudes;
+            // For spectrogram, we need complex values
+            const complexResult = [];
+            for(let i = 0; i < result.magnitudes.length; i++) {
+                const mag = result.magnitudes[i];
+                const phase = result.phases[i] * Math.PI / 180; // Convert degrees to radians
+                complexResult.push({
+                    real: mag * Math.cos(phase),
+                    imag: mag * Math.sin(phase)
+                });
+            }
+            return complexResult;
         } catch (err) {
             console.error('Error in FFT computation:', err);
             return null;
