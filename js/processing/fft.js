@@ -2,7 +2,7 @@
  * FFT Processing Module
  * Implements FFT analysis and related functionality
  */
-class FFTProcessor {
+export class FFTProcessor {
     /**
      * Compute FFT of a signal
      * @param {Array} signal - Input signal array

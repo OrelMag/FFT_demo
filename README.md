@@ -48,6 +48,8 @@ A comprehensive web-based FFT (Fast Fourier Transform) signal analysis tool that
   - Real-time signal visualization
   - Interactive time-amplitude display
   - Automatic scaling
+  - Signal envelope detection
+  - Zero-crossing analysis
 
 - **Frequency Domain**:
   - Magnitude spectrum display
@@ -55,11 +57,23 @@ A comprehensive web-based FFT (Fast Fourier Transform) signal analysis tool that
   - Peak markers
   - Phase information
   - Interactive frequency-magnitude tooltips
+  - Waterfall plot for time-varying spectrum
+  - Spectrogram view with adjustable colormap
+  - 3D spectrum visualization
+
+- **Advanced Visualization**:
+  - Time-frequency analysis display
+  - Power spectral density plots
+  - Coherence analysis for multi-channel signals
+  - Cross-correlation visualization
+  - Group delay and phase delay plots
 
 - **Analysis Results**:
   - Tabular display of dominant frequencies
   - Magnitude and phase information
   - Real-time updates
+  - Statistical analysis of frequency components
+  - Harmonic distortion measurements
 
 ### Data Input/Output
 - **File Loading**:
@@ -75,6 +89,7 @@ A comprehensive web-based FFT (Fast Fourier Transform) signal analysis tool that
   - Peak data export
   - Timestamp-based file naming
   - Complete spectrum information
+  - Visualization export (PNG/SVG)
 
 ## Installation
 
@@ -133,12 +148,14 @@ A comprehensive web-based FFT (Fast Fourier Transform) signal analysis tool that
 - Chart.js for visualization
 - Implements Cooley-Tukey FFT algorithm
 - Modular architecture for easy extension
+- WebGL for 3D visualizations
 
 ### Performance
 - Automatic power-of-2 padding for efficient FFT
 - Real-time processing and visualization
 - Optimized peak detection algorithm
 - Efficient data handling for large signals
+- GPU acceleration for complex visualizations
 
 ## Project Structure
 ```
@@ -151,9 +168,13 @@ fft-analyzer/
 │   ├── signalGenerator/
 │   │   └── basicWaves.js # Waveform generation
 │   ├── processing/
-│   │   └── fft.js       # FFT implementation
+│   │   ├── fft.js       # FFT implementation
+│   │   └── spectral.js  # Advanced spectral analysis
 │   ├── visualization/
-│   │   └── plotManager.js # Plotting utilities
+│   │   ├── plotManager.js # Basic plotting utilities
+│   │   ├── waterfall.js  # Waterfall plot implementation
+│   │   ├── spectrogram.js # Spectrogram visualization
+│   │   └── threeDVis.js  # 3D visualization tools
 │   └── utils/
 │       ├── dataLoader.js # File loading utilities
 │       └── export.js     # Data export utilities
@@ -169,10 +190,11 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Acknowledgments
 - FFT implementation based on the Cooley-Tukey algorithm
 - Uses Chart.js for visualization
+- Three.js for 3D visualizations
 - Inspired by various signal processing tools
 
-## Authors
-- Your Name - *Initial work* - [YourGitHub](https://github.com/yourusername)
+## Author
+- Orel Magidish - *Systems Engineer* - [GitHub](https://github.com/yourusername)
 
 ## Support
 For support, please open an issue in the GitHub repository.

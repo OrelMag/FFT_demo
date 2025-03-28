@@ -2,7 +2,7 @@
  * Signal Generator Module
  * Provides functions for generating various waveforms
  */
-class SignalGenerator {
+export class SignalGenerator {
     /**
      * Generate time points array
      * @param {number} duration - Duration in seconds

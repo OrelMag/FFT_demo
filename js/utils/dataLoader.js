@@ -2,7 +2,7 @@
  * Data Loader Module
  * Handles loading and parsing of data files
  */
-class DataLoader {
+export class DataLoader {
     /**
      * Parse CSV data
      * @param {string} content - CSV file content

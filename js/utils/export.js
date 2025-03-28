@@ -2,7 +2,7 @@
  * Export Utilities Module
  * Handles data export functionality
  */
-class ExportUtils {
+export class ExportUtils {
     /**
      * Export data to CSV file
      * @param {Object} data - Data to export

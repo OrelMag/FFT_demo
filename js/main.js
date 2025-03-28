@@ -2,9 +2,57 @@
  * Main Application Module
  * Handles user interactions and coordinates signal processing
  */
-document.addEventListener('DOMContentLoaded', () => {
-    // Initialize plot manager
-    const plotManager = new PlotManager();
+import { PlotManager } from './visualization/plotManager.js';
+import { Spectrogram } from './visualization/spectrogram.js';
+import { WaterfallPlot } from './visualization/waterfall.js';
+import { ThreeDVisualizer } from './visualization/threeDVis.js';
+import { SpectralAnalyzer } from './processing/spectral.js';
+import { SignalGenerator } from './signalGenerator/basicWaves.js';
+import { DataLoader } from './utils/dataLoader.js';
+import { FFTProcessor } from './processing/fft.js';
+import { ExportUtils } from './utils/export.js';
+
+document.addEventListener('DOMContentLoaded', async () => {
+    // Function to initialize the application
+    function initializeApp() {
+        // Check if required classes are available
+        const requiredClasses = [
+            { name: 'PlotManager', class: PlotManager },
+            { name: 'Spectrogram', class: Spectrogram },
+            { name: 'WaterfallPlot', class: WaterfallPlot },
+            { name: 'ThreeDVisualizer', class: ThreeDVisualizer },
+            { name: 'SpectralAnalyzer', class: SpectralAnalyzer },
+            { name: 'SignalGenerator', class: SignalGenerator },
+            { name: 'DataLoader', class: DataLoader },
+            { name: 'FFTProcessor', class: FFTProcessor }
+        ];
+
+        for (const { name, class: classRef } of requiredClasses) {
+            if (typeof classRef === 'undefined') {
+                throw new Error(`${name} not loaded`);
+            }
+        }
+
+        // Initialize visualization components
+        const plotManager = new PlotManager();
+        const spectrogram = new Spectrogram('spectrogramCanvas');
+        const waterfallPlot = new WaterfallPlot('threeDContainer');
+        const threeDVis = new ThreeDVisualizer('threeDContainer');
+        const spectralAnalyzer = new SpectralAnalyzer();
+
+        return {
+            plotManager,
+            spectrogram,
+            waterfallPlot,
+            threeDVis,
+            spectralAnalyzer
+        };
+    }
+
+    // Try to initialize the application
+    try {
+        const components = initializeApp();
+        const { plotManager, spectrogram, waterfallPlot, threeDVis, spectralAnalyzer } = components;
     
     // Get form elements
     const signalForm = document.getElementById('signalForm');
@@ -25,9 +73,19 @@ document.addEventListener('DOMContentLoaded', () => {
     const exportFFTButton = document.getElementById('exportFFT');
     const exportPeaksButton = document.getElementById('exportPeaks');
     const addFrequencyButton = document.getElementById('addFrequency');
+    
+    // Get advanced visualization controls
+    const spectrogramColormap = document.getElementById('spectrogramColormap');
+    const visType = document.getElementById('visType');
+    const basicTab = document.getElementById('basic-tab');
+    const advancedTab = document.getElementById('advanced-tab');
+    const threeDContainer = document.getElementById('threeDContainer');
 
     let currentFrequencies = [];
     let lastFFTResult = null;
+    let currentSignal = null;
+    let currentTimePoints = null;
+    let currentSampleRate = null;
 
     /**
      * Create a frequency component input group
@@ -85,6 +143,37 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     /**
+     * Update advanced visualizations
+     */
+    function updateAdvancedVisualizations() {
+        if (!currentSignal || !currentSampleRate) return;
+
+        // Update spectrogram
+        spectrogram.updateOptions({ colormap: spectrogramColormap.value });
+        const spectrogramData = spectralAnalyzer.computeSpectrogram(currentSignal, currentSampleRate);
+        spectrogram.update(spectrogramData.data, currentSampleRate);
+
+        // Update 3D visualization based on selected type
+        switch (visType.value) {
+            case '3d-spectrum':
+                threeDVis.create3DSpectrum(lastFFTResult.magnitudes, currentSampleRate);
+                break;
+            case 'waterfall':
+                waterfallPlot.updateData(lastFFTResult.magnitudes, currentTimePoints);
+                break;
+            case 'phase-delay':
+                const phaseData = spectralAnalyzer.computeGroupDelay(currentSignal, currentSampleRate);
+                threeDVis.createPhaseDelayVis(phaseData);
+                break;
+            case 'coherence':
+                if (lastFFTResult && lastFFTResult.coherence) {
+                    threeDVis.createCoherenceVis(lastFFTResult.coherence);
+                }
+                break;
+        }
+    }
+
+    /**
      * Process and display signal
      * @param {Array} signal - Signal data array
      * @param {Array} timePoints - Time points array
@@ -92,20 +181,30 @@ document.addEventListener('DOMContentLoaded', () => {
      * @param {string} title - Title for the plots
      */
     function processAndDisplaySignal(signal, timePoints, sampleRate, title) {
-        try {
-            // Get peak threshold
-            const peakThreshold = parseFloat(peakThresholdInput.value);
-            
-            // Compute FFT
-            lastFFTResult = FFTProcessor.computeFFT(signal, {
-                windowType: windowTypeSelect.value,
-                sampleRate: sampleRate,
-                peakThreshold: peakThreshold
-            });
+            try {
+                currentSignal = signal;
+                currentTimePoints = timePoints;
+                currentSampleRate = sampleRate;
+    
+                // Get peak threshold
+                const peakThreshold = parseFloat(peakThresholdInput.value);
+                
+                // Compute FFT and store original data
+                lastFFTResult = {
+                    ...FFTProcessor.computeFFT(signal, {
+                        windowType: windowTypeSelect.value,
+                        sampleRate: sampleRate,
+                        peakThreshold: peakThreshold
+                    }),
+                    signal,
+                    timePoints,
+                    sampleRate,
+                    title
+                };
+    
+                const { frequencies, magnitudes, phases, peaks } = lastFFTResult;
 
-            const { frequencies, magnitudes, phases, peaks } = lastFFTResult;
-
-            // Update plots
+            // Update basic plots
             plotManager.updateTimePlot(timePoints, signal);
             plotManager.updateFreqPlot(frequencies, magnitudes, {
                 phases,
@@ -121,6 +220,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 timeTitle: `${title} - Time Domain`,
                 freqTitle: `Frequency Spectrum - ${windowTypeSelect.value.charAt(0).toUpperCase() + windowTypeSelect.value.slice(1)} Window`
             });
+
+            // Update advanced visualizations if tab is active
+            if (advancedTab.classList.contains('active')) {
+                updateAdvancedVisualizations();
+            }
 
         } catch (error) {
             console.error('Error processing signal:', error);
@@ -250,6 +354,18 @@ document.addEventListener('DOMContentLoaded', () => {
         return true;
     }
 
+    /**
+     * Handle window resize
+     */
+    function handleResize() {
+        const width = threeDContainer.clientWidth;
+        const height = threeDContainer.clientHeight;
+        
+        if (waterfallPlot) waterfallPlot.resize(width, height);
+        if (threeDVis) threeDVis.resize(width, height);
+        if (spectrogram) spectrogram.resize(width, height);
+    }
+
     // Add event listeners
     waveTypeSelect.addEventListener('change', () => {
         const isMultiSine = waveTypeSelect.value === 'multiSine';
@@ -269,7 +385,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // FFT controls event listeners
     windowTypeSelect.addEventListener('change', () => {
-        if (lastFFTResult) {
+        if (lastFFTResult && lastFFTResult.signal) {
             const { signal, timePoints, sampleRate, title } = lastFFTResult;
             processAndDisplaySignal(signal, timePoints, sampleRate, title);
         }
@@ -287,10 +403,24 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     peakThresholdInput.addEventListener('change', () => {
-        if (lastFFTResult) {
+        if (lastFFTResult && lastFFTResult.signal) {
             const { signal, timePoints, sampleRate, title } = lastFFTResult;
             processAndDisplaySignal(signal, timePoints, sampleRate, title);
         }
+    });
+
+    // Advanced visualization controls event listeners
+    spectrogramColormap.addEventListener('change', () => {
+        if (lastFFTResult && lastFFTResult.signal) {
+            updateAdvancedVisualizations();
+        }
+    });
+    visType.addEventListener('change', updateAdvancedVisualizations);
+
+    // Tab change event listeners
+    advancedTab.addEventListener('shown.bs.tab', () => {
+        updateAdvancedVisualizations();
+        handleResize();
     });
 
     // Export buttons event listeners
@@ -307,10 +437,20 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // Window resize event listener
+    window.addEventListener('resize', handleResize);
+
     // Add form submit event listeners
     signalForm.addEventListener('submit', handleSignalFormSubmit);
     fileForm.addEventListener('submit', handleFileFormSubmit);
 
     // Generate initial signal
     signalForm.dispatchEvent(new Event('submit'));
+
+    } catch (error) {
+        console.error('Initialization error:', error);
+        alert('Failed to initialize application: ' + error.message);
+        // Clear the page content to prevent interaction with uninitialized components
+        document.body.innerHTML = '<div class="alert alert-danger m-3">Application failed to initialize. Please refresh the page or check the console for details.</div>';
+    }
 });

@@ -2,7 +2,7 @@
  * Plot Manager Module
  * Handles visualization of signals in time and frequency domains
  */
-class PlotManager {
+export class PlotManager {
     constructor() {
         this.timeChart = null;
         this.freqChart = null;
