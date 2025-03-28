@@ -146,30 +146,61 @@ document.addEventListener('DOMContentLoaded', async () => {
      * Update advanced visualizations
      */
     function updateAdvancedVisualizations() {
-        if (!currentSignal || !currentSampleRate) return;
+        try {
+            // Validate required data is available
+            if (!currentSignal || !currentSampleRate) {
+                console.log('No signal data available for advanced visualizations');
+                return;
+            }
 
-        // Update spectrogram
-        spectrogram.updateOptions({ colormap: spectrogramColormap.value });
-        const spectrogramData = spectralAnalyzer.computeSpectrogram(currentSignal, currentSampleRate);
-        spectrogram.update(spectrogramData.data, currentSampleRate);
+            if (!lastFFTResult) {
+                console.log('No FFT results available for advanced visualizations');
+                return;
+            }
 
-        // Update 3D visualization based on selected type
-        switch (visType.value) {
-            case '3d-spectrum':
-                threeDVis.create3DSpectrum(lastFFTResult.magnitudes, currentSampleRate);
-                break;
-            case 'waterfall':
-                waterfallPlot.updateData(lastFFTResult.magnitudes, currentTimePoints);
-                break;
-            case 'phase-delay':
-                const phaseData = spectralAnalyzer.computeGroupDelay(currentSignal, currentSampleRate);
-                threeDVis.createPhaseDelayVis(phaseData);
-                break;
-            case 'coherence':
-                if (lastFFTResult && lastFFTResult.coherence) {
-                    threeDVis.createCoherenceVis(lastFFTResult.coherence);
+            // Update spectrogram
+            try {
+                spectrogram.updateOptions({ colormap: spectrogramColormap.value });
+                const spectrogramData = spectralAnalyzer.computeSpectrogram(currentSignal, currentSampleRate);
+                if (spectrogramData && spectrogramData.data) {
+                    spectrogram.update(spectrogramData.data, currentSampleRate);
                 }
-                break;
+            } catch (err) {
+                console.error('Error updating spectrogram:', err);
+            }
+
+            // Update 3D visualization based on selected type
+            if (!visType || !visType.value) return;
+
+            try {
+                switch (visType.value) {
+                    case '3d-spectrum':
+                        if (lastFFTResult.magnitudes) {
+                            threeDVis.create3DSpectrum(lastFFTResult.magnitudes, currentSampleRate);
+                        }
+                        break;
+                    case 'waterfall':
+                        if (lastFFTResult.magnitudes && Array.isArray(lastFFTResult.magnitudes)) {
+                            waterfallPlot.updateData(lastFFTResult.magnitudes, currentTimePoints);
+                        }
+                        break;
+                    case 'phase-delay':
+                        const phaseData = spectralAnalyzer.computeGroupDelay(currentSignal, currentSampleRate);
+                        if (phaseData) {
+                            threeDVis.createPhaseDelayVis(phaseData);
+                        }
+                        break;
+                    case 'coherence':
+                        if (lastFFTResult && lastFFTResult.coherence) {
+                            threeDVis.createCoherenceVis(lastFFTResult.coherence);
+                        }
+                        break;
+                }
+            } catch (err) {
+                console.error('Error updating 3D visualization:', err);
+            }
+        } catch (err) {
+            console.error('Error in advanced visualizations:', err);
         }
     }
 

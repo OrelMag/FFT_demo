@@ -13,29 +13,66 @@ export class FFTProcessor {
      * @returns {Object} Object containing frequency, magnitude, and phase arrays, plus detected peaks
      */
     static computeFFT(signal, options) {
-        const { windowType = 'none', sampleRate, peakThreshold = 10 } = options;
-        
-        // Apply window function if specified
-        const windowedSignal = this.applyWindow(signal, windowType);
-        
-        // Pad array to power of 2 if needed
-        const paddedLength = this.nextPowerOf2(signal.length);
-        const paddedSignal = this.padSignal(windowedSignal, paddedLength);
-        
-        // Prepare complex input for FFT
-        const complexSignal = paddedSignal.map(x => [x, 0]);
-        
-        // Compute FFT
-        const fftResult = this.fft(complexSignal);
-        
-        // Calculate frequencies, magnitudes, and phases
-        const frequencies = this.calculateFrequencies(paddedLength, sampleRate);
-        const { magnitudes, phases } = this.calculateMagnitudesAndPhases(fftResult);
-        
-        // Detect peaks
-        const peaks = this.detectPeaks(frequencies, magnitudes, phases, peakThreshold);
+        try {
+            // Validate input signal
+            if (!signal || !Array.isArray(signal) && !(signal instanceof Float32Array)) {
+                throw new Error('Invalid input signal');
+            }
 
-        return { frequencies, magnitudes, phases, peaks };
+            if (signal.length === 0) {
+                throw new Error('Signal is empty');
+            }
+
+            // Validate options
+            if (!options || typeof options !== 'object') {
+                throw new Error('Invalid options');
+            }
+
+            const { windowType = 'none', sampleRate, peakThreshold = 10 } = options;
+
+            if (!sampleRate || sampleRate <= 0) {
+                throw new Error('Invalid sample rate');
+            }
+
+            // Apply window function if specified
+            const windowedSignal = this.applyWindow(signal, windowType);
+            
+            // Pad array to power of 2 if needed
+            const paddedLength = this.nextPowerOf2(signal.length);
+            const paddedSignal = this.padSignal(windowedSignal, paddedLength);
+            
+            // Prepare complex input for FFT
+            const complexSignal = paddedSignal.map(x => [isFinite(x) ? x : 0, 0]);
+            
+            // Compute FFT
+            const fftResult = this.fft(complexSignal);
+            if (!fftResult) {
+                throw new Error('FFT computation failed');
+            }
+            
+            // Calculate frequencies, magnitudes, and phases
+            const frequencies = this.calculateFrequencies(paddedLength, sampleRate);
+            const { magnitudes, phases } = this.calculateMagnitudesAndPhases(fftResult);
+            
+            // Detect peaks
+            const peaks = this.detectPeaks(frequencies, magnitudes, phases, peakThreshold);
+
+            // Validate output
+            if (!magnitudes || !phases || !frequencies || !peaks) {
+                throw new Error('FFT result validation failed');
+            }
+
+            return {
+                frequencies,
+                magnitudes: magnitudes.map(m => isFinite(m) ? m : 0),
+                phases: phases.map(p => isFinite(p) ? p : 0),
+                peaks
+            };
+        } catch (err) {
+            console.error('Error in FFT computation:', err);
+            // Return null to indicate failure, letting caller handle the error
+            return null;
+        }
     }
 
     /**

@@ -105,11 +105,23 @@ export class WaterfallPlot {
             1
         );
 
-        // Update vertices based on frequency data
-        const vertices = geometry.vertices;
-        for (let i = 0; i < vertices.length; i++) {
-            vertices[i].z = frequencyData[i % frequencyData.length] / 255;
+        // Validate input data
+        if (!frequencyData || !Array.isArray(frequencyData)) {
+            console.error('Invalid frequency data provided to waterfall plot');
+            return;
         }
+
+        // Update vertices using modern Three.js API
+        const positions = geometry.getAttribute('position');
+        const posArray = positions.array;
+        
+        for (let i = 0; i < posArray.length; i += 3) { // Iterate by 3 since each vertex has x,y,z
+            const vertexIndex = Math.floor(i / 3);
+            const dataIndex = vertexIndex % frequencyData.length;
+            posArray[i + 2] = frequencyData[dataIndex] / 255; // Update Z coordinate
+        }
+        
+        positions.needsUpdate = true;
 
         const material = new THREE.MeshPhongMaterial({
             color: this.getColorForSurface(this.surfaces.length),

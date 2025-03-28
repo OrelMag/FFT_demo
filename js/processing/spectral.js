@@ -41,26 +41,66 @@ export class SpectralAnalyzer {
      * @returns {Object} Spectrogram data
      */
     computeSpectrogram(signal, sampleRate) {
-        const segments = this._segmentSignal(signal);
-        const spectrogramData = segments.map(segment => {
-            const windowed = this._applyWindow(segment, 'hanning');
-            const fft = this._computeFFT(windowed);
-            return Array.from(fft.slice(0, this.fftSize / 2))
-                .map(val => 20 * Math.log10(Math.abs(val)));
-        });
-
-        const timeSteps = segments.length;
-        const frequencies = new Float32Array(this.fftSize / 2);
-        for (let i = 0; i < frequencies.length; i++) {
-            frequencies[i] = (i * sampleRate) / this.fftSize;
+        if (!signal || !sampleRate) {
+            console.error('Invalid input to computeSpectrogram');
+            return null;
         }
 
-        return {
-            data: spectrogramData,
-            frequencies,
-            timeSteps,
-            timeResolution: (this.fftSize * (1 - this.overlap)) / sampleRate
-        };
+        try {
+            // Convert signal to Float32Array if it isn't already
+            const signalArray = signal instanceof Float32Array ? signal : new Float32Array(signal);
+            
+            // Ensure minimum signal length
+            if (signalArray.length < this.fftSize) {
+                console.error('Signal too short for spectrogram analysis');
+                return null;
+            }
+
+            const segments = this._segmentSignal(signalArray);
+            if (!segments || segments.length === 0) {
+                console.error('Failed to segment signal');
+                return null;
+            }
+
+            // Process segments with error handling
+            const spectrogramData = segments.map((segment, i) => {
+                try {
+                    const windowed = this._applyWindow(segment, 'hanning');
+                    const fft = this._computeFFT(windowed);
+                    if (!fft) return null;
+                    
+                    return Array.from(fft.slice(0, this.fftSize / 2))
+                        .map(val => {
+                            const magnitude = Math.abs(val);
+                            return magnitude === 0 ? -100 : 20 * Math.log10(magnitude);
+                        });
+                } catch (err) {
+                    console.error(`Error processing segment ${i}:`, err);
+                    return null;
+                }
+            }).filter(Boolean); // Remove any null segments
+
+            if (spectrogramData.length === 0) {
+                console.error('No valid segments processed');
+                return null;
+            }
+
+            const timeSteps = spectrogramData.length;
+            const frequencies = new Float32Array(this.fftSize / 2);
+            for (let i = 0; i < frequencies.length; i++) {
+                frequencies[i] = (i * sampleRate) / this.fftSize;
+            }
+
+            return {
+                data: spectrogramData,
+                frequencies,
+                timeSteps,
+                timeResolution: (this.fftSize * (1 - this.overlap)) / sampleRate
+            };
+        } catch (err) {
+            console.error('Error computing spectrogram:', err);
+            return null;
+        }
     }
 
     /**
@@ -93,21 +133,42 @@ export class SpectralAnalyzer {
      * @returns {Object} Group delay data
      */
     computeGroupDelay(signal, sampleRate) {
-        const fft = this._computeFFT(signal);
-        const phase = fft.map(c => Math.atan2(c.imag, c.real));
-        const groupDelay = new Float32Array(phase.length - 1);
-        
-        for (let i = 0; i < groupDelay.length; i++) {
-            groupDelay[i] = -(phase[i + 1] - phase[i]) / 
-                           ((2 * Math.PI * sampleRate) / this.fftSize);
-        }
+        try {
+            if (!signal || !sampleRate) {
+                console.error('Invalid input to computeGroupDelay');
+                return null;
+            }
 
-        const frequencies = new Float32Array(groupDelay.length);
-        for (let i = 0; i < frequencies.length; i++) {
-            frequencies[i] = (i * sampleRate) / this.fftSize;
-        }
+            const fft = this._computeFFT(signal);
+            if (!fft) {
+                console.error('FFT computation failed in computeGroupDelay');
+                return null;
+            }
 
-        return { frequencies, groupDelay };
+            // Check if FFT result has complex components
+            if (!fft.some(val => val.hasOwnProperty('imag') && val.hasOwnProperty('real'))) {
+                console.error('FFT result missing complex components');
+                return null;
+            }
+
+            const phase = fft.map(c => Math.atan2(c.imag, c.real));
+            const groupDelay = new Float32Array(phase.length - 1);
+            
+            for (let i = 0; i < groupDelay.length; i++) {
+                groupDelay[i] = -(phase[i + 1] - phase[i]) /
+                               ((2 * Math.PI * sampleRate) / this.fftSize);
+            }
+
+            const frequencies = new Float32Array(groupDelay.length);
+            for (let i = 0; i < frequencies.length; i++) {
+                frequencies[i] = (i * sampleRate) / this.fftSize;
+            }
+
+            return { frequencies, groupDelay };
+        } catch (err) {
+            console.error('Error computing group delay:', err);
+            return null;
+        }
     }
 
     // Private helper methods
@@ -143,11 +204,31 @@ export class SpectralAnalyzer {
     }
 
     _computeFFT(signal) {
-        const result = FFTProcessor.computeFFT(signal, {
-            windowType: 'none',
-            sampleRate: this.fftSize,
-            peakThreshold: 0
-        });
-        return result.magnitudes;
+        try {
+            if (!signal || signal.length === 0) {
+                console.error('Invalid signal provided to FFT');
+                return null;
+            }
+
+            if (!(signal instanceof Float32Array)) {
+                signal = new Float32Array(signal);
+            }
+
+            const result = FFTProcessor.computeFFT(signal, {
+                windowType: 'none',
+                sampleRate: this.fftSize,
+                peakThreshold: 0
+            });
+
+            if (!result || !result.magnitudes) {
+                console.error('FFT computation failed to return magnitudes');
+                return null;
+            }
+
+            return result.magnitudes;
+        } catch (err) {
+            console.error('Error in FFT computation:', err);
+            return null;
+        }
     }
 }
