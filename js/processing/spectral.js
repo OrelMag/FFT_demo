@@ -5,8 +5,8 @@ import { FFTProcessor } from './fft.js';
 
 export class SpectralAnalyzer {
     constructor() {
-        this.fftSize = 1024; // Reduced FFT size for better handling of shorter signals
-        this.overlap = 0.75; // Increased overlap for smoother visualization
+        this.fftSize = 512; // Further reduced FFT size for more time points
+        this.overlap = 0.9; // Higher overlap for smoother visualization and more time points
     }
 
     /**
@@ -190,30 +190,39 @@ export class SpectralAnalyzer {
 
     // Private helper methods
     _segmentSignal(signal) {
-        const segmentSize = this.fftSize;
-        const hopSize = Math.floor(segmentSize * (1 - this.overlap));
-        const segments = [];
-        
-        // Handle signals shorter than or equal to FFT size
-        if (signal.length <= segmentSize) {
-            segments.push(signal);
+        try {
+            const segmentSize = this.fftSize;
+            const hopSize = Math.max(1, Math.floor(segmentSize * (1 - this.overlap)));
+            const segments = [];
+            
+            console.log(`Segmenting signal: length=${signal.length}, segmentSize=${segmentSize}, hopSize=${hopSize}`);
+            
+            if (signal.length <= segmentSize) {
+                // For very short signals, create overlapped copies
+                const numSegments = Math.max(10, Math.floor(signal.length / hopSize));
+                for (let i = 0; i < numSegments; i++) {
+                    const segment = new Float32Array(segmentSize);
+                    const start = Math.min(Math.max(0, i * hopSize), signal.length - 1);
+                    segment.set(signal.slice(start));
+                    segments.push(segment);
+                }
+            } else {
+                // For longer signals, use sliding window with high overlap
+                for (let i = 0; i < signal.length - hopSize; i += hopSize) {
+                    const segment = new Float32Array(segmentSize);
+                    const end = Math.min(i + segmentSize, signal.length);
+                    const data = signal.slice(i, end);
+                    segment.set(data);
+                    segments.push(segment);
+                }
+            }
+            
+            console.log(`Created ${segments.length} segments of size ${segmentSize}`);
             return segments;
+        } catch (err) {
+            console.error('Error in signal segmentation:', err);
+            return [signal]; // Return original signal as fallback
         }
-        
-        // For longer signals, create overlapping segments
-        for (let i = 0; i <= signal.length - segmentSize; i += hopSize) {
-            segments.push(signal.slice(i, i + segmentSize));
-        }
-        
-        // If there's a remaining portion that's significant (> 25% of FFT size)
-        const remaining = signal.length - (segments.length * hopSize);
-        if (remaining > segmentSize * 0.25) {
-            const lastSegment = new Float32Array(segmentSize);
-            lastSegment.set(signal.slice(signal.length - segmentSize));
-            segments.push(lastSegment);
-        }
-        
-        return segments;
     }
 
     _applyWindow(segment, windowType) {

@@ -59,13 +59,22 @@ export class DataLoader {
                     }
                 }
             } else if (typeof data === 'object') {
-                // Check for our specific JSON structure with metadata and data array
+                // Check for signal property first
+                if (Array.isArray(data.signal)) {
+                    console.log('Found signal array in JSON:', data.signal.length, 'points');
+                    return data.signal;
+                }
+                // Fallback to data property
                 if (Array.isArray(data.data)) {
+                    console.log('Found data array in JSON:', data.data.length, 'points');
                     return data.data;
                 }
-                // Try to find an array property
-                const arrayProp = Object.keys(data).find(key => Array.isArray(data[key]));
-                if (arrayProp && data[arrayProp].every(item => typeof item === 'number')) {
+                // Try to find any array property containing numbers
+                const arrayProp = Object.keys(data).find(key =>
+                    Array.isArray(data[key]) && data[key].every(item => typeof item === 'number')
+                );
+                if (arrayProp) {
+                    console.log(`Found numeric array in property "${arrayProp}":`, data[arrayProp].length, 'points');
                     return data[arrayProp];
                 }
             }

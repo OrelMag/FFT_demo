@@ -6,11 +6,36 @@
 export class Spectrogram {
     constructor(canvasId, options = {}) {
         this.canvas = document.getElementById(canvasId);
-        this.ctx = this.canvas.getContext('2d');
+        if (!this.canvas) {
+            throw new Error(`Canvas element with id ${canvasId} not found`);
+        }
+
+        const dpr = window.devicePixelRatio || 1;
+        
+        // Get the initial size
+        const width = options.width || this.canvas.clientWidth || 800;
+        const height = options.height || this.canvas.clientHeight || 400;
+        
+        // Set display size in CSS pixels
+        this.canvas.style.width = width + 'px';
+        this.canvas.style.height = height + 'px';
+        
+        // Set actual size in memory
+        this.canvas.width = Math.floor(width * dpr);
+        this.canvas.height = Math.floor(height * dpr);
+        
+        this.ctx = this.canvas.getContext('2d', {
+            alpha: false,
+            desynchronized: true
+        });
+        
+        // Scale all drawing operations by the device pixel ratio
+        this.ctx.scale(dpr, dpr);
         
         this.options = {
             width: options.width || this.canvas.width,
             height: options.height || this.canvas.height,
+            devicePixelRatio: window.devicePixelRatio || 1,
             colormap: options.colormap || 'viridis',
             minDecibels: options.minDecibels || -100,
             maxDecibels: options.maxDecibels || -30,
@@ -157,31 +182,55 @@ export class Spectrogram {
      * Draws the spectrogram on the canvas
      */
     draw() {
-        const { width, height } = this.options;
-        this.ctx.clearRect(0, 0, width, height);
-
-        // Validate data exists and has proper structure
-        if (!this.spectrogramData || this.spectrogramData.length === 0) {
-            console.log('No spectrogram data available to draw');
-            return;
-        }
-
-        // Validate data dimensions
-        const numTimeSteps = this.spectrogramData.length;
-        const numFreqBins = this.spectrogramData[0]?.length;
-        if (!numFreqBins) {
-            console.error('Invalid spectrogram data structure');
-            return;
-        }
-
-        const columnWidth = width / numTimeSteps;
-        const rowHeight = height / numFreqBins;
-
         try {
+            const { width, height } = this.options;
+            
+            // Clear the canvas
+            this.ctx.clearRect(0, 0, width, height);
+
+            // Validate data exists and has proper structure
+            if (!this.spectrogramData || this.spectrogramData.length === 0) {
+                console.log('No spectrogram data available to draw');
+                // Draw a message on the canvas
+                this.ctx.fillStyle = '#333333';
+                this.ctx.fillRect(0, 0, width, height);
+                this.ctx.fillStyle = '#ffffff';
+                this.ctx.font = '14px Arial';
+                this.ctx.textAlign = 'center';
+                this.ctx.textBaseline = 'middle';
+                this.ctx.fillText('No spectrogram data available', width / 2, height / 2);
+                return;
+            }
+
+            // Get dimensions and validate
+            const numTimeSteps = this.spectrogramData.length;
+            const numFreqBins = this.spectrogramData[0]?.length;
+            
+            console.log(`Drawing spectrogram: ${numTimeSteps} time steps, ${numFreqBins} frequency bins`);
+            
+            if (!numFreqBins) {
+                console.error('Invalid spectrogram data structure');
+                return;
+            }
+
+            // Calculate dimensions for rendering
+            const columnWidth = Math.ceil(width / numTimeSteps);
+            const rowHeight = Math.ceil(height / numFreqBins);
+
+            // Set image smoothing
+            this.ctx.imageSmoothingEnabled = true;
+            this.ctx.imageSmoothingQuality = 'high';
+
+            // Create off-screen canvas for double buffering with proper DPI scaling
+            const dpr = this.options.devicePixelRatio;
+            const offscreen = new OffscreenCanvas(width * dpr, height * dpr);
+            const offCtx = offscreen.getContext('2d');
+            offCtx.scale(dpr, dpr);
+
             // Draw frequency bins with error handling
             for (let i = 0; i < this.spectrogramData.length; i++) {
                 const column = this.spectrogramData[i];
-                if (!Array.isArray(column) && !(column instanceof Float32Array)) {
+                if (!Array.isArray(column)) {
                     console.error(`Invalid column data at index ${i}`);
                     continue;
                 }
@@ -192,25 +241,26 @@ export class Spectrogram {
                         continue;  // Skip invalid values
                     }
 
-                    try {
-                        this.ctx.fillStyle = this.getColor(value);
-                        this.ctx.fillRect(
-                            i * columnWidth,
-                            height - (j + 1) * rowHeight,
-                            columnWidth + 1,
-                            rowHeight + 1
-                        );
-                    } catch (err) {
-                        console.error(`Error drawing spectrogram bin at (${i},${j}):`, err);
-                    }
+                    offCtx.fillStyle = this.getColor(value);
+                    offCtx.fillRect(
+                        i * columnWidth,
+                        height - (j + 1) * rowHeight,
+                        columnWidth + 1,
+                        rowHeight + 1
+                    );
                 }
             }
 
-            // Draw axes and labels
+            // Copy the off-screen canvas to the visible canvas
+            this.ctx.drawImage(offscreen, 0, 0);
+
+            // Draw axes on top
+            this.drawAxes();
+            
+            console.log('Spectrogram drawing completed');
         } catch (err) {
             console.error('Error drawing spectrogram:', err);
         }
-        this.drawAxes();
     }
 
     /**
@@ -259,10 +309,24 @@ export class Spectrogram {
      * @param {number} height - New height
      */
     resize(width, height) {
-        this.canvas.width = width;
-        this.canvas.height = height;
+        const dpr = this.options.devicePixelRatio;
+        
+        // Set display size in CSS pixels
+        this.canvas.style.width = width + 'px';
+        this.canvas.style.height = height + 'px';
+        
+        // Set actual size in memory
+        this.canvas.width = Math.floor(width * dpr);
+        this.canvas.height = Math.floor(height * dpr);
+        
+        // Scale the context to ensure correct drawing operations
+        this.ctx.scale(dpr, dpr);
+        
+        // Update stored dimensions
         this.options.width = width;
         this.options.height = height;
+        
+        console.log(`Resized spectrogram: ${width}x${height} with DPR ${dpr}`);
         this.draw();
     }
 
