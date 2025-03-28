@@ -1,0 +1,43 @@
+/* General Styles */
+body {
+    background-color: #f8f9fa;
+    padding-bottom: 2rem;
+}
+
+/* Card Styles */
+.card {
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.card-header {
+    background-color: #f8f9fa;
+}
+
+/* Canvas Container */
+canvas {
+    width: 100% !important;
+    height: 300px !important;
+    margin: 10px 0;
+}
+
+/* Form Controls */
+.form-control:focus, .form-select:focus {
+    border-color: #80bdff;
+    box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25);
+}
+
+/* Button Styles */
+.btn-primary {
+    width: 100%;
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+    .col-md-3 {
+        margin-bottom: 1rem;
+    }
+    
+    canvas {
+        height: 200px !important;
+    }
+}
